@@ -17,16 +17,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4.2.2
 
-      - name: Find and extract project zip
-        run: |
-          ZIP=$(find . -name "*.zip" | head -1)
-          echo "Found zip: $ZIP"
-          unzip "$ZIP" -d extracted/
-          PROJECT=$(dirname $(find extracted/ -name "pubspec.yaml" | head -1))
-          echo "Project root: $PROJECT"
-          cp -r "$PROJECT"/. .
-          ls -la
-
       - name: Setup Java 17
         uses: actions/setup-java@v4.7.1
         with:
@@ -43,23 +33,56 @@ jobs:
       - name: Accept Android licenses
         run: yes | flutter doctor --android-licenses || true
 
+      - name: Create fresh Flutter project
+        run: |
+          flutter create --org com.ruanmei --project-name ruan_mei_companion fresh_project
+          echo "✓ Fresh Flutter project created"
+
+      - name: Extract our source code from zip
+        run: |
+          ZIP=$(find . -name "*.zip" | head -1)
+          echo "Found zip: $ZIP"
+          unzip "$ZIP" -d extracted/
+          PROJECT=$(dirname $(find extracted/ -name "pubspec.yaml" | head -1))
+          echo "Project root: $PROJECT"
+
+          # Copy our lib/ assets/ pubspec.yaml into fresh project
+          cp -r "$PROJECT/lib/." fresh_project/lib/
+          cp -r "$PROJECT/assets/." fresh_project/assets/ 2>/dev/null || true
+          cp "$PROJECT/pubspec.yaml" fresh_project/pubspec.yaml
+
+          echo "✓ Source code injected"
+          ls fresh_project/lib/
+
+      - name: Fix pubspec assets section
+        working-directory: fresh_project
+        run: |
+          # Make sure assets folder exists
+          mkdir -p assets/live2d/html
+
+          # Copy html viewer
+          find ../extracted -name "live2d_viewer.html" -exec cp {} assets/live2d/html/ \;
+
+          echo "✓ Assets ready"
+          ls assets/live2d/html/
+
       - name: Flutter pub get
+        working-directory: fresh_project
         run: flutter pub get
 
+      - name: Flutter doctor
+        run: flutter doctor -v
+
       - name: Build APK
+        working-directory: fresh_project
         run: |
           flutter build apk \
             --release \
             --target-platform android-arm64
 
-      - name: Rename APK
-        run: |
-          mv build/app/outputs/flutter-apk/app-release.apk \
-             build/app/outputs/flutter-apk/RuanMei-Companion.apk
-
       - name: Upload APK
         uses: actions/upload-artifact@v4.6.2
         with:
           name: RuanMei-Companion-APK
-          path: build/app/outputs/flutter-apk/RuanMei-Companion.apk
+          path: fresh_project/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30

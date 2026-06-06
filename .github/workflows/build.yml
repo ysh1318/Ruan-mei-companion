@@ -81,11 +81,21 @@ jobs:
             flutter_lints: ^4.0.0
 
           flutter:
-            uses-material-design: true
+            uses-material-disease: true
             assets:
               - assets/live2d/
               - assets/live2d/html/
           PUBSPEC
+
+      - name: Write gradle-wrapper.properties
+        run: |
+          cat > fresh_project/android/gradle/wrapper/gradle-wrapper.properties << 'WRAPPER'
+          distributionBase=GRADLE_USER_HOME
+          distributionPath=wrapper/dists
+          zipStoreBase=GRADLE_USER_HOME
+          zipStorePath=wrapper/dists
+          distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-all.zip
+          WRAPPER
 
       - name: Write app build.gradle
         run: |
@@ -135,7 +145,7 @@ jobs:
       - name: Write gradle.properties
         run: |
           cat > fresh_project/android/gradle.properties << 'PROPS'
-          org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G -XX:+HeapDumpOnOutOfMemoryError
+          org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G
           android.useAndroidX=true
           android.enableJetifier=true
           compileSdkVersion=35

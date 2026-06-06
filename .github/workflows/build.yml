@@ -26,7 +26,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.22.0'
+          flutter-version: '3.24.0'
           channel: 'stable'
           cache: true
 
@@ -36,42 +36,34 @@ jobs:
       - name: Create fresh Flutter project
         run: |
           flutter create --org com.ruanmei --project-name ruan_mei_companion fresh_project
-          echo "✓ Fresh Flutter project created"
+          echo "✓ Fresh project created"
 
       - name: Extract our source code from zip
         run: |
           ZIP=$(find . -name "*.zip" | head -1)
-          echo "Found zip: $ZIP"
           unzip "$ZIP" -d extracted/
           PROJECT=$(dirname $(find extracted/ -name "pubspec.yaml" | head -1))
-          echo "Project root: $PROJECT"
-
-          # Copy our lib/ assets/ pubspec.yaml into fresh project
           cp -r "$PROJECT/lib/." fresh_project/lib/
-          cp -r "$PROJECT/assets/." fresh_project/assets/ 2>/dev/null || true
+          mkdir -p fresh_project/assets/live2d/html
+          find extracted/ -name "live2d_viewer.html" -exec cp {} fresh_project/assets/live2d/html/ \;
           cp "$PROJECT/pubspec.yaml" fresh_project/pubspec.yaml
+          echo "✓ Code injected"
 
-          echo "✓ Source code injected"
-          ls fresh_project/lib/
-
-      - name: Fix pubspec assets section
-        working-directory: fresh_project
+      - name: Set Android SDK 35
+        working-directory: fresh_project/android/app
         run: |
-          # Make sure assets folder exists
-          mkdir -p assets/live2d/html
-
-          # Copy html viewer
-          find ../extracted -name "live2d_viewer.html" -exec cp {} assets/live2d/html/ \;
-
-          echo "✓ Assets ready"
-          ls assets/live2d/html/
+          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' build.gradle
+          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdk 35/' build.gradle
+          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/' build.gradle
+          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdk 35/' build.gradle
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' build.gradle
+          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdk 23/' build.gradle
+          echo "✓ SDK versions set"
+          cat build.gradle
 
       - name: Flutter pub get
         working-directory: fresh_project
         run: flutter pub get
-
-      - name: Flutter doctor
-        run: flutter doctor -v
 
       - name: Build APK
         working-directory: fresh_project

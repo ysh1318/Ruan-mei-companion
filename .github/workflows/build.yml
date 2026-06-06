@@ -23,10 +23,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Flutter
+      - name: Setup Flutter 3.44.0
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          flutter-version: '3.44.0'
           channel: 'stable'
           cache: true
 
@@ -45,7 +45,7 @@ jobs:
           mkdir -p fresh_project/assets/live2d/html
           find extracted/ -name "live2d_viewer.html" -exec cp {} fresh_project/assets/live2d/html/ \;
 
-      - name: Write pubspec.yaml
+      - name: Write all project files
         run: |
           printf '%s\n' \
             "name: ruan_mei_companion" \
@@ -54,17 +54,17 @@ jobs:
             "version: 1.0.0+1" \
             "" \
             "environment:" \
-            "  sdk: '>=3.3.0 <4.0.0'" \
+            "  sdk: '>=3.5.0 <4.0.0'" \
             "" \
             "dependencies:" \
             "  flutter:" \
             "    sdk: flutter" \
             "  flutter_overlay_window: ^0.4.0" \
             "  flutter_inappwebview: ^6.1.0" \
-            "  flutter_sound: ^9.2.13" \
+            "  record: ^6.0.0" \
             "  just_audio: ^0.9.40" \
             "  http: ^1.2.0" \
-            "  permission_handler: ^11.3.1" \
+            "  permission_handler: ^12.0.0" \
             "  shared_preferences: ^2.3.0" \
             "  provider: ^6.1.2" \
             "  file_picker: ^8.1.2" \
@@ -77,7 +77,7 @@ jobs:
             "dev_dependencies:" \
             "  flutter_test:" \
             "    sdk: flutter" \
-            "  flutter_lints: ^4.0.0" \
+            "  flutter_lints: ^5.0.0" \
             "" \
             "flutter:" \
             "  uses-material-design: true" \
@@ -86,14 +86,12 @@ jobs:
             "    - assets/live2d/html/" \
             > fresh_project/pubspec.yaml
 
-      - name: Write gradle files
-        run: |
           printf '%s\n' \
             "distributionBase=GRADLE_USER_HOME" \
             "distributionPath=wrapper/dists" \
             "zipStoreBase=GRADLE_USER_HOME" \
             "zipStorePath=wrapper/dists" \
-            "distributionUrl=https\://services.gradle.org/distributions/gradle-8.7-all.zip" \
+            "distributionUrl=https\://services.gradle.org/distributions/gradle-8.10.2-all.zip" \
             > fresh_project/android/gradle/wrapper/gradle-wrapper.properties
 
           printf '%s\n' \
@@ -104,7 +102,7 @@ jobs:
             '}' \
             'android {' \
             '    namespace "com.ruanmei.ruan_mei_companion"' \
-            '    compileSdk 35' \
+            '    compileSdk 36' \
             '    ndkVersion "27.0.12077973"' \
             '    compileOptions {' \
             '        sourceCompatibility JavaVersion.VERSION_17' \
@@ -113,8 +111,8 @@ jobs:
             '    kotlinOptions { jvmTarget = "17" }' \
             '    defaultConfig {' \
             '        applicationId "com.ruanmei.ruan_mei_companion"' \
-            '        minSdk 23' \
-            '        targetSdk 35' \
+            '        minSdk 24' \
+            '        targetSdk 36' \
             '        versionCode 1' \
             '        versionName "1.0.0"' \
             '    }' \
@@ -149,8 +147,8 @@ jobs:
             '}' \
             'plugins {' \
             '    id "dev.flutter.flutter-plugin-loader" version "1.0.0"' \
-            '    id "com.android.application" version "8.5.2" apply false' \
-            '    id "org.jetbrains.kotlin.android" version "1.9.23" apply false' \
+            '    id "com.android.application" version "8.7.3" apply false' \
+            '    id "org.jetbrains.kotlin.android" version "2.0.21" apply false' \
             '}' \
             'include ":app"' \
             > fresh_project/android/settings.gradle
@@ -160,16 +158,14 @@ jobs:
           printf '%s\n' \
             "import 'dart:convert';" \
             "import 'dart:io';" \
-            "import 'package:flutter_sound/flutter_sound.dart';" \
+            "import 'package:record/record.dart';" \
             "import 'package:just_audio/just_audio.dart';" \
             "import 'package:http/http.dart' as http;" \
             "import 'package:path_provider/path_provider.dart';" \
-            "import 'package:permission_handler/permission_handler.dart';" \
             "" \
             "class VoiceService {" \
-            "  final FlutterSoundRecorder _recorder = FlutterSoundRecorder();" \
+            "  final AudioRecorder _recorder = AudioRecorder();" \
             "  final AudioPlayer _player = AudioPlayer();" \
-            "  bool _recorderReady = false;" \
             "  bool _isRecording = false;" \
             "  bool _isPlaying = false;" \
             "  String? _recordingPath;" \
@@ -177,9 +173,6 @@ jobs:
             "  Function(bool)? onRecordingChanged;" \
             "" \
             "  Future<void> init() async {" \
-            "    await Permission.microphone.request();" \
-            "    await _recorder.openRecorder();" \
-            "    _recorderReady = true;" \
             "    _player.playerStateStream.listen((state) {" \
             "      _isPlaying = state.playing;" \
             "      onPlayingChanged?.call(_isPlaying);" \
@@ -190,10 +183,15 @@ jobs:
             "  bool get isPlaying => _isPlaying;" \
             "" \
             "  Future<bool> startRecording() async {" \
-            "    if (!_recorderReady || _isRecording) return false;" \
+            "    if (_isRecording) return false;" \
+            "    final hasPermission = await _recorder.hasPermission();" \
+            "    if (!hasPermission) return false;" \
             "    final dir = await getTemporaryDirectory();" \
-            "    _recordingPath = '\${dir.path}/rm_\${DateTime.now().millisecondsSinceEpoch}.aac';" \
-            "    await _recorder.startRecorder(toFile: _recordingPath, codec: Codec.aacADTS);" \
+            "    _recordingPath = '\${dir.path}/rm_\${DateTime.now().millisecondsSinceEpoch}.m4a';" \
+            "    await _recorder.start(" \
+            "      const RecordConfig(encoder: AudioEncoder.aacLc, sampleRate: 16000)," \
+            "      path: _recordingPath!," \
+            "    );" \
             "    _isRecording = true;" \
             "    onRecordingChanged?.call(true);" \
             "    return true;" \
@@ -201,16 +199,16 @@ jobs:
             "" \
             "  Future<String?> stopRecording() async {" \
             "    if (!_isRecording) return null;" \
-            "    await _recorder.stopRecorder();" \
+            "    final path = await _recorder.stop();" \
             "    _isRecording = false;" \
             "    onRecordingChanged?.call(false);" \
-            "    return _recordingPath;" \
+            "    return path;" \
             "  }" \
             "" \
             "  Future<String> transcribeAudio(String filePath, String apiKey) async {" \
             "    final req = http.MultipartRequest('POST', Uri.parse('https://api.openai.com/v1/audio/transcriptions'));" \
             "    req.headers['Authorization'] = 'Bearer \$apiKey';" \
-            "    req.files.add(await http.MultipartFile.fromPath('file', filePath, filename: 'audio.aac'));" \
+            "    req.files.add(await http.MultipartFile.fromPath('file', filePath, filename: 'audio.m4a'));" \
             "    req.fields['model'] = 'whisper-1';" \
             "    final res = await http.Response.fromStream(await req.send());" \
             "    if (res.statusCode == 200) return jsonDecode(res.body)['text'] as String? ?? '';" \
@@ -236,7 +234,7 @@ jobs:
             "  Future<void> stopSpeaking() async => await _player.stop();" \
             "" \
             "  Future<void> dispose() async {" \
-            "    await _recorder.closeRecorder();" \
+            "    await _recorder.dispose();" \
             "    await _player.dispose();" \
             "  }" \
             "}" \
@@ -256,3 +254,4 @@ jobs:
           name: RuanMei-Companion-APK
           path: fresh_project/build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
+          

@@ -34,11 +34,9 @@ jobs:
         run: yes | flutter doctor --android-licenses || true
 
       - name: Create fresh Flutter project
-        run: |
-          flutter create --org com.ruanmei --project-name ruan_mei_companion fresh_project
-          echo "✓ Fresh project created"
+        run: flutter create --org com.ruanmei --project-name ruan_mei_companion fresh_project
 
-      - name: Extract our source code from zip
+      - name: Extract source from zip
         run: |
           ZIP=$(find . -name "*.zip" | head -1)
           unzip "$ZIP" -d extracted/
@@ -46,20 +44,130 @@ jobs:
           cp -r "$PROJECT/lib/." fresh_project/lib/
           mkdir -p fresh_project/assets/live2d/html
           find extracted/ -name "live2d_viewer.html" -exec cp {} fresh_project/assets/live2d/html/ \;
-          cp "$PROJECT/pubspec.yaml" fresh_project/pubspec.yaml
-          echo "✓ Code injected"
 
-      - name: Set Android SDK 35
-        working-directory: fresh_project/android/app
+      - name: Write pubspec.yaml
         run: |
-          sed -i 's/compileSdk = flutter.compileSdkVersion/compileSdk = 35/' build.gradle
-          sed -i 's/compileSdkVersion flutter.compileSdkVersion/compileSdk 35/' build.gradle
-          sed -i 's/targetSdk = flutter.targetSdkVersion/targetSdk = 35/' build.gradle
-          sed -i 's/targetSdkVersion flutter.targetSdkVersion/targetSdk 35/' build.gradle
-          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 23/' build.gradle
-          sed -i 's/minSdkVersion flutter.minSdkVersion/minSdk 23/' build.gradle
-          echo "✓ SDK versions set"
-          cat build.gradle
+          cat > fresh_project/pubspec.yaml << 'PUBSPEC'
+          name: ruan_mei_companion
+          description: Ruan Mei Live2D Companion
+          publish_to: 'none'
+          version: 1.0.0+1
+
+          environment:
+            sdk: '>=3.3.0 <4.0.0'
+
+          dependencies:
+            flutter:
+              sdk: flutter
+            flutter_overlay_window: ^0.4.0
+            flutter_inappwebview: ^6.1.0
+            record: ^5.1.2
+            audioplayers: ^6.1.0
+            http: ^1.2.0
+            permission_handler: ^11.3.1
+            shared_preferences: ^2.3.0
+            flutter_secure_storage: ^9.2.2
+            provider: ^6.1.2
+            file_picker: ^8.1.2
+            path_provider: ^2.1.4
+            path: ^1.9.0
+            flutter_keyboard_visibility: ^6.0.0
+            cupertino_icons: ^1.0.8
+            google_fonts: ^6.2.1
+
+          dev_dependencies:
+            flutter_test:
+              sdk: flutter
+            flutter_lints: ^4.0.0
+
+          flutter:
+            uses-material-design: true
+            assets:
+              - assets/live2d/
+              - assets/live2d/html/
+          PUBSPEC
+
+      - name: Write app build.gradle
+        run: |
+          cat > fresh_project/android/app/build.gradle << 'GRADLE'
+          plugins {
+              id "com.android.application"
+              id "kotlin-android"
+              id "dev.flutter.flutter-gradle-plugin"
+          }
+
+          android {
+              namespace "com.ruanmei.ruan_mei_companion"
+              compileSdk 35
+              ndkVersion "27.0.12077973"
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+
+              defaultConfig {
+                  applicationId "com.ruanmei.ruan_mei_companion"
+                  minSdk 23
+                  targetSdk 35
+                  versionCode 1
+                  versionName "1.0.0"
+              }
+
+              buildTypes {
+                  release {
+                      signingConfig signingConfigs.debug
+                      minifyEnabled false
+                      shrinkResources false
+                  }
+              }
+          }
+
+          flutter {
+              source "../.."
+          }
+          GRADLE
+
+      - name: Write gradle.properties
+        run: |
+          cat > fresh_project/android/gradle.properties << 'PROPS'
+          org.gradle.jvmargs=-Xmx4G -XX:MaxMetaspaceSize=2G -XX:+HeapDumpOnOutOfMemoryError
+          android.useAndroidX=true
+          android.enableJetifier=true
+          compileSdkVersion=35
+          targetSdkVersion=35
+          minSdkVersion=23
+          PROPS
+
+      - name: Write settings.gradle
+        run: |
+          cat > fresh_project/android/settings.gradle << 'SETTINGS'
+          pluginManagement {
+              def flutterSdkPath = {
+                  def properties = new Properties()
+                  file("local.properties").withInputStream { properties.load(it) }
+                  def flutterSdkPath = properties.getProperty("flutter.sdk")
+                  assert flutterSdkPath != null, "flutter.sdk not set in local.properties"
+                  return flutterSdkPath
+              }()
+              includeBuild("$flutterSdkPath/packages/flutter_tools/gradle")
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          plugins {
+              id "dev.flutter.flutter-plugin-loader" version "1.0.0"
+              id "com.android.application" version "8.5.2" apply false
+              id "org.jetbrains.kotlin.android" version "1.9.23" apply false
+          }
+          include ":app"
+          SETTINGS
 
       - name: Flutter pub get
         working-directory: fresh_project
@@ -67,10 +175,7 @@ jobs:
 
       - name: Build APK
         working-directory: fresh_project
-        run: |
-          flutter build apk \
-            --release \
-            --target-platform android-arm64
+        run: flutter build apk --release --target-platform android-arm64
 
       - name: Upload APK
         uses: actions/upload-artifact@v4.6.2
